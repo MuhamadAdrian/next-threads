@@ -37,3 +37,75 @@ export async function createThread({
     throw new Error(`Failed to create thread: ${error.message}`);
   }
 }
+
+export async function fetchThreads(pageNumber = 1, pageSize = 20) {
+  try {
+    connectToDB();
+
+    const skipAmount = (pageNumber - 1) * pageSize;
+
+    // fetch the post that have no parent
+    const threadsQuery = Thread.find({ parentId: { $in: [null, undefined] } })
+      .sort({ createdAt: "desc" })
+      .skip(skipAmount)
+      .limit(pageSize)
+      .populate({ path: "author", model: User })
+      .populate({
+        path: "children",
+        populate: {
+          path: "author",
+          model: User,
+          select: "_id name parentId image",
+        },
+      });
+
+    const totalThreadsCount = await Thread.countDocuments({
+      parentId: { $in: [null, undefined] },
+    });
+
+    const threads = await threadsQuery.exec();
+
+    const isNext = totalThreadsCount > skipAmount + threads.length;
+
+    return { threads, isNext };
+  } catch (error: any) {
+    throw new Error(`Failed to fetch threads: ${error.message}`);
+  }
+}
+
+export async function fetchThreadById(id: string) {
+  try {
+    connectToDB();
+
+    const thread = await Thread.findById(id)
+      .populate({
+        path: "author",
+        model: User,
+        select: "_id id name image",
+      })
+      .populate({
+        path: "children",
+        populate: [
+          {
+            path: "author",
+            model: User,
+            select: "_id id name parentId image",
+          },
+          {
+            path: "children",
+            model: Thread,
+            populate: {
+              path: "author",
+              model: User,
+              select: "_id id name parentId image",
+            },
+          },
+        ],
+      })
+      .exec();
+
+    return thread;
+  } catch (error: any) {
+    throw new Error(`Error fetching thread: ${error.message}`);
+  }
+}
